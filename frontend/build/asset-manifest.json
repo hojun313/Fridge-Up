@@ -1,0 +1,15 @@
+{
+  "files": {
+    "main.css": "/Fridge-Up/static/css/main.e5f4b529.css",
+    "main.js": "/Fridge-Up/static/js/main.9ab748dc.js",
+    "static/js/453.670e15c7.chunk.js": "/Fridge-Up/static/js/453.670e15c7.chunk.js",
+    "index.html": "/Fridge-Up/index.html",
+    "main.e5f4b529.css.map": "/Fridge-Up/static/css/main.e5f4b529.css.map",
+    "main.9ab748dc.js.map": "/Fridge-Up/static/js/main.9ab748dc.js.map",
+    "453.670e15c7.chunk.js.map": "/Fridge-Up/static/js/453.670e15c7.chunk.js.map"
+  },
+  "entrypoints": [
+    "static/css/main.e5f4b529.css",
+    "static/js/main.9ab748dc.js"
+  ]
+}

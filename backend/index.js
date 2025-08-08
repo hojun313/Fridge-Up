@@ -1,3 +1,4 @@
+
 const express = require('express');
 require('dotenv').config();
 const cors = require('cors');
@@ -8,7 +9,12 @@ const path = require('path'); // 경로 모듈 추가
 const app = express();
 const port = 3001;
 
+// CORS 설정 - 모든 도메인 허용
 app.use(cors());
+
+// OPTIONS 요청에 대한 명시적 처리 (CORS preflight)
+app.options('*', cors());
+
 app.use(express.json());
 
 // 데이터베이스 파일 경로

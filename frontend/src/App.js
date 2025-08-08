@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import './App.css';
 
 // 백엔드 서버 주소
-const API_URL = 'http://localhost:3001';
+const API_URL = 'https://fridge-up.vercel.app'; // 여기에 Vercel에서 복사한 백엔드 URL을 붙여넣으세요!
 
 function App() {
   // 상태 관리
