@@ -8,7 +8,7 @@
     {
       "src": "frontend/package.json",
       "use": "@vercel/static-build",
-      "config": { "distDir": "build", "installCommand": "npm install" }
+      "config": { "distDir": "build", "installCommand": "yarn install" }
     }
   ],
   "rewrites": [
