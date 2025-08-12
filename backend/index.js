@@ -29,12 +29,19 @@ const DB_PATH = path.join(__dirname, 'db.json');
 const readDB = async () => {
   try {
     const data = await fs.readFile(DB_PATH, 'utf8');
-    return JSON.parse(data);
+    const db = JSON.parse(data);
+    // db가 객체이고 ingredients 속성이 배열인지 확인
+    if (db && typeof db === 'object' && Array.isArray(db.ingredients)) {
+      return db;
+    }
+    // 구조가 올바르지 않으면 기본 구조 반환
+    return { ingredients: [] };
   } catch (error) {
-    // 파일이 없거나 내용이 비어있으면 기본 구조 반환
-    if (error.code === 'ENOENT' || error.message.includes('Unexpected end of JSON input')) {
+    // 파일이 없거나 JSON 파싱 오류 시 기본 구조 반환
+    if (error.code === 'ENOENT' || error instanceof SyntaxError) {
         return { ingredients: [] };
     }
+    // 그 외 다른 오류는 전파
     throw error;
   }
 };
