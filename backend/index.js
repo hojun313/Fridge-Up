@@ -3,21 +3,26 @@ const express = require('express');
 require('dotenv').config();
 const cors = require('cors');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
-const fs = require('fs').promises; // 파일 시스템 모듈 추가
-const path = require('path'); // 경로 모듈 추가
+const fs = require('fs').promises;
+const path = require('path');
 
 const app = express();
-const port = 3001;
+// Vercel / Railway 등 배포 환경 포트 지원
+const port = process.env.PORT || 3001;
 
-// CORS 설정 - 모든 도메인 허용
-app.use(cors());
+// CORS 설정 (필요시 origin 화이트리스트로 교체)
+app.use(cors({
+  origin: process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',') : '*',
+  methods: ['GET','POST','DELETE','OPTIONS'],
+  allowedHeaders: ['Content-Type','Authorization']
+}));
 
 // OPTIONS 요청에 대한 명시적 처리 (CORS preflight)
 app.options('*', cors());
 
 app.use(express.json());
 
-// 데이터베이스 파일 경로
+// 데이터베이스 파일 경로 (서버리스 환경 대비: /tmp 사용 고려 가능)
 const DB_PATH = path.join(__dirname, 'db.json');
 
 // Helper function to read the database
@@ -99,27 +104,33 @@ app.delete('/api/ingredients/:id', async (req, res) => {
 });
 
 
-// --- 레시피 추천 API --- (수정됨)
-const genAI = new GoogleGenerativeAI(process.env.API_KEY);
+// --- 레시피 추천 API ---
+let genAI = null;
+if (process.env.API_KEY) {
+  try {
+    genAI = new GoogleGenerativeAI(process.env.API_KEY);
+  } catch (e) {
+    console.error('Generative AI 초기화 실패:', e.message);
+  }
+} else {
+  console.warn('경고: API_KEY 환경변수가 설정되지 않았습니다. /api/recommend 사용 불가.');
+}
 
 app.post('/api/recommend', async (req, res) => {
+  if (!genAI) {
+    return res.status(503).json({ error: 'AI 기능이 비활성화되었습니다. (API_KEY 미설정)' });
+  }
   try {
-    // 이제 DB에서 재료 목록을 가져옴
     const db = await readDB();
-    const ingredients = db.ingredients.map(ing => ing.name);
-
-    if (!ingredients || ingredients.length === 0) {
+    const ingredients = (db.ingredients || []).map(ing => ing.name);
+    if (!ingredients.length) {
       return res.status(400).json({ recommendation: '냉장고에 재료가 없어요. 먼저 재료를 추가해주세요!' });
     }
-
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
-
-    const prompt = `현재 냉장고에 있는 재료는 다음과 같습니다: ${ingredients.join(', ')}. 이 재료들을 활용해서 만들 수 있는 요리 레시피를 추천해주세요. 각 레시피는 이름, 간단한 설명, 필요한 재료 목록, 그리고 조리 순서로 구성해주세요.`;
-
+    const model = genAI.getGenerativeModel({ model: process.env.GEMINI_MODEL || 'gemini-1.5-flash' });
+    const prompt = `현재 냉장고에 있는 재료: ${ingredients.join(', ')}\n이 재료들을 활용할 수 있는 요리 1~3개와 간단한 설명, 필요한 추가 재료(있다면)를 제시하세요.`;
     const result = await model.generateContent(prompt);
     const response = await result.response;
     const text = response.text();
-
     res.json({ recommendation: text });
   } catch (error) {
     console.error('AI 추천 생성 중 오류:', error);
@@ -127,6 +138,19 @@ app.post('/api/recommend', async (req, res) => {
   }
 });
 
-app.listen(port, () => {
-  console.log(`Server is running on http://localhost:${port}`);
+// 헬스 체크 & 환경 상태 노출 (민감 정보 제외)
+app.get('/healthz', (req, res) => {
+  res.json({
+    ok: true,
+    aiEnabled: !!genAI,
+    timestamp: new Date().toISOString()
+  });
 });
+
+if (require.main === module) {
+  app.listen(port, () => {
+    console.log(`Server listening on :${port}`);
+  });
+}
+
+module.exports = app;
