@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import './App.css';
 
-// 백엔드 서버 주소: 환경변수 우선 (배포 시 REACT_APP_API_URL 설정)
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001';
+
 
 function App() {
   // 상태 관리
@@ -22,7 +21,7 @@ function App() {
   const fetchIngredients = async () => {
     try {
       setError(null);
-      const response = await fetch(`${API_URL}/api/ingredients`);
+  const response = await fetch(`/api/ingredients`);
       if (!response.ok) throw new Error('재료를 불러오는 데 실패했습니다.');
       const data = await response.json();
       setIngredients(data);
@@ -49,7 +48,7 @@ function App() {
 
     try {
       setError(null);
-      const response = await fetch(`${API_URL}/api/ingredients`, {
+  const response = await fetch(`/api/ingredients`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(ingredientData),
@@ -78,7 +77,7 @@ function App() {
     if (!window.confirm('정말로 이 재료를 삭제하시겠습니까?')) return;
     try {
       setError(null);
-      const response = await fetch(`${API_URL}/api/ingredients/${id}`, {
+  const response = await fetch(`/api/ingredients/${id}`, {
         method: 'DELETE',
       });
       if (!response.ok) throw new Error('재료 삭제에 실패했습니다.');
@@ -95,7 +94,7 @@ function App() {
     setRecommendation('');
     setError(null);
     try {
-      const response = await fetch(`${API_URL}/api/recommend`, { method: 'POST' });
+  const response = await fetch(`/api/recommend`, { method: 'POST' });
       const data = await response.json();
       if (response.status !== 200) {
         throw new Error(data.recommendation || data.error || '레시피 추천에 실패했습니다.');
