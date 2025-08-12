@@ -1,65 +1,52 @@
-
 const express = require('express');
 require('dotenv').config();
 const cors = require('cors');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
-const fs = require('fs').promises;
-const path = require('path');
+const admin = require('firebase-admin');
 
+// --- Firebase Admin SDK 초기화 ---
+try {
+  // Vercel 환경 변수에서 서비스 계정 키를 파싱
+  const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+  
+  admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount),
+    projectId: process.env.FIREBASE_PROJECT_ID,
+  });
+  
+  console.log('Firebase Admin SDK 초기화 성공');
+} catch (error) {
+  console.error('Firebase Admin SDK 초기화 실패:', error.message);
+  // 초기화 실패 시 AI 기능도 비활성화되도록 처리할 수 있음
+}
+
+const db = admin.firestore(); // Firestore 인스턴스 가져오기
 const app = express();
-// Vercel / Railway 등 배포 환경 포트 지원
 const port = process.env.PORT || 3001;
 
-// CORS 설정 (필요시 origin 화이트리스트로 교체)
+// CORS 설정
 app.use(cors({
   origin: process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',') : '*',
-  methods: ['GET','POST','DELETE','OPTIONS'],
-  allowedHeaders: ['Content-Type','Authorization']
+  methods: ['GET', 'POST', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
-
-// OPTIONS 요청에 대한 명시적 처리 (CORS preflight)
 app.options('*', cors());
-
 app.use(express.json());
 
-// 데이터베이스 파일 경로 (서버리스 환경 대비: /tmp 사용 고려 가능)
-const DB_PATH = path.join(__dirname, 'db.json');
-
-// Helper function to read the database
-const readDB = async () => {
-  try {
-    const data = await fs.readFile(DB_PATH, 'utf8');
-    const db = JSON.parse(data);
-    // db가 객체이고 ingredients 속성이 배열인지 확인
-    if (db && typeof db === 'object' && Array.isArray(db.ingredients)) {
-      return db;
-    }
-    // 구조가 올바르지 않으면 기본 구조 반환
-    return { ingredients: [] };
-  } catch (error) {
-    // 파일이 없거나 JSON 파싱 오류 시 기본 구조 반환
-    if (error.code === 'ENOENT' || error instanceof SyntaxError) {
-        return { ingredients: [] };
-    }
-    // 그 외 다른 오류는 전파
-    throw error;
-  }
-};
-
-// Helper function to write to the database
-const writeDB = async (data) => {
-  await fs.writeFile(DB_PATH, JSON.stringify(data, null, 2), 'utf8');
-};
-
-// --- 재료 API 엔드포인트 ---
+// --- 재료 API 엔드포인트 (Firestore 사용) ---
 
 // 모든 재료 가져오기 (GET /api/ingredients)
 app.get('/api/ingredients', async (req, res) => {
   try {
-    const db = await readDB();
-    res.json(db.ingredients || []);
+    const ingredientsCollection = db.collection('ingredients');
+    const snapshot = await ingredientsCollection.get();
+    if (snapshot.empty) {
+      return res.json([]);
+    }
+    const ingredients = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    res.json(ingredients);
   } catch (error) {
-    console.error(error);
+    console.error('Error fetching ingredients:', error);
     res.status(500).json({ error: 'Failed to read ingredients.' });
   }
 });
@@ -72,19 +59,12 @@ app.post('/api/ingredients', async (req, res) => {
       return res.status(400).json({ error: 'Ingredient name and expiry date are required.' });
     }
 
-    const db = await readDB();
-    const newIngredient = {
-      id: Date.now(), // 간단한 고유 ID 생성
-      name,
-      expiryDate,
-    };
+    const newIngredient = { name, expiryDate };
+    const docRef = await db.collection('ingredients').add(newIngredient);
 
-    db.ingredients.push(newIngredient);
-    await writeDB(db);
-
-    res.status(201).json(newIngredient);
+    res.status(201).json({ id: docRef.id, ...newIngredient });
   } catch (error) {
-    console.error(error);
+    console.error('Error adding ingredient:', error);
     res.status(500).json({ error: 'Failed to add ingredient.' });
   }
 });
@@ -93,25 +73,27 @@ app.post('/api/ingredients', async (req, res) => {
 app.delete('/api/ingredients/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const db = await readDB();
+    if (!id) {
+      return res.status(400).json({ error: 'Ingredient ID is required.' });
+    }
+    
+    const docRef = db.collection('ingredients').doc(id);
+    const doc = await docRef.get();
 
-    const initialLength = db.ingredients.length;
-    db.ingredients = db.ingredients.filter(ing => ing.id !== parseInt(id));
-
-    if (db.ingredients.length === initialLength) {
-        return res.status(404).json({ error: 'Ingredient not found.' });
+    if (!doc.exists) {
+      return res.status(404).json({ error: 'Ingredient not found.' });
     }
 
-    await writeDB(db);
-    res.status(204).send(); // 성공적으로 삭제되었으나 내용은 없음
+    await docRef.delete();
+    res.status(204).send();
   } catch (error) {
-    console.error(error);
+    console.error('Error deleting ingredient:', error);
     res.status(500).json({ error: 'Failed to delete ingredient.' });
   }
 });
 
 
-// --- 레시피 추천 API ---
+// --- 레시피 추천 API (Firestore 사용) ---
 let genAI = null;
 if (process.env.API_KEY) {
   try {
@@ -128,11 +110,12 @@ app.post('/api/recommend', async (req, res) => {
     return res.status(503).json({ error: 'AI 기능이 비활성화되었습니다. (API_KEY 미설정)' });
   }
   try {
-    const db = await readDB();
-    const ingredients = (db.ingredients || []).map(ing => ing.name);
-    if (!ingredients.length) {
-      return res.status(400).json({ recommendation: '냉장고에 재료가 없어요. 먼저 재료를 추가해주세요!' });
+    const snapshot = await db.collection('ingredients').get();
+    if (snapshot.empty) {
+        return res.status(400).json({ recommendation: '냉장고에 재료가 없어요. 먼저 재료를 추가해주세요!' });
     }
+    const ingredients = snapshot.docs.map(doc => doc.data().name);
+
     const model = genAI.getGenerativeModel({ model: process.env.GEMINI_MODEL || 'gemini-1.5-flash' });
     const prompt = `현재 냉장고에 있는 재료: ${ingredients.join(', ')}\n이 재료들을 활용할 수 있는 요리 1~3개와 간단한 설명, 필요한 추가 재료(있다면)를 제시하세요.`;
     const result = await model.generateContent(prompt);
@@ -150,6 +133,7 @@ app.get('/healthz', (req, res) => {
   res.json({
     ok: true,
     aiEnabled: !!genAI,
+    firebaseInitialized: admin.apps.length > 0, // Firebase 초기화 상태 확인
     timestamp: new Date().toISOString()
   });
 });
