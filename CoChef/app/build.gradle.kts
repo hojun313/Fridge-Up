@@ -39,6 +39,13 @@ android {
         compose = true
         buildConfig = true
     }
+
+    // Gemini API 키를 BuildConfig 로 주입 (gradle.properties 또는 환경변수에서 로드)
+    val geminiApiKey: String? = (project.findProperty("GEMINI_API_KEY") as String?)
+        ?: System.getenv("GEMINI_API_KEY")
+    buildTypes.all {
+        buildConfigField("String", "GEMINI_API_KEY", "\"${geminiApiKey ?: ""}\"")
+    }
 }
 
 dependencies {

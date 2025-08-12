@@ -23,6 +23,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.cookandroid.cochef.BuildConfig
 import com.google.ai.client.generativeai.GenerativeModel
 import com.google.ai.client.generativeai.type.content
 import com.google.gson.*
@@ -40,9 +41,8 @@ import java.time.format.DateTimeFormatter
 import java.time.format.DateTimeParseException
 import java.time.temporal.ChronoUnit
 
-// TODO: 여기에 발급받은 Google AI API 키를 입력하세요.
-// 실제 앱에서는 보안을 위해 buildConfigField 등을 사용하여 더 안전한 방법으로 관리해야 합니다.
-private const val API_KEY = "AIzaSyAnWEbI9NeTUULJ_1sI3EiUvjMiIBAD47c" // 예시 키, 실제 키로 교체 필요
+// BuildConfig 에 주입된 Gemini API 키 (빈 문자열이면 미설정)
+private val API_KEY: String by lazy { BuildConfig.GEMINI_API_KEY }
 
 // SharedPreferences 파일 이름 및 데이터 키 상수
 private const val PREFS_NAME = "refrigerator_prefs"
